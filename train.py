@@ -52,6 +52,7 @@ class TrainManager(object):
 	def __init__(self, student, teacher=None, ta=None, train_loader=None, test_loader=None, train_config={}):
 		self.student = student
 		self.teacher = teacher
+		self.ta = ta
 		self.have_teacher = bool(self.teacher)
 		self.have_ta = bool(self.ta)
 		self.device = train_config['device']
