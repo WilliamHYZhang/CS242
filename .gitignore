@@ -1,0 +1,5 @@
+train_acc_logs
+resnet*_None_best.pth.tar
+
+__pycache__
+data/
