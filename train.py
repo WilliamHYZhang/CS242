@@ -98,9 +98,9 @@ class TrainManager(object):
 					teacher_outputs = self.teacher(data)
 					ta_outputs = self.ta(data)
 					# Knowledge Distillation Loss
-					loss_KD = nn.KLDivLoss()(F.log_softmax(output / T, dim=1),
-										     F.softmax(teacher_outputs / T, dim=1),
-											 F.softmax(ta_outputs / T, dim=1))
+					avg_teacher_ta_outputs = (F.softmax(teacher_outputs / T, dim=1) + F.softmax(ta_outputs / T, dim=1)) / 2
+
+					loss_KD = nn.KLDivLoss()(F.log_softmax(output / T, dim=1), avg_teacher_ta_outputs)
 					loss = (1 - lambda_) * loss_SL + lambda_ * T * T * loss_KD
 					
 				loss.backward()
