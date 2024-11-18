@@ -30,6 +30,8 @@ def parse_arguments():
 	parser.add_argument('--teacher-checkpoint', default='', type=str, help='optinal pretrained checkpoint for teacher')
 	parser.add_argument('--cuda', default=False, type=str2bool, help='whether or not use cuda(train on GPU)')
 	parser.add_argument('--dataset-dir', default='./data', type=str,  help='dataset directory')
+	parser.add_argument('--ta', default='./data', type=str,  help='ta stuff')
+	parser.add_argument('--ta-checkpoint', default='./data', type=str,  help='ta checkpoint stuff')
 	args = parser.parse_args()
 	return args
 
