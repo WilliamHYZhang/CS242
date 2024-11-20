@@ -297,14 +297,14 @@ if __name__ == "__main__":
             ta_name = "{}_{}_best.pth.tar".format(args.ta, trial_id)
             ta_train_config["name"] = args.ta
             ta_trainer = TrainManager(
-                teacher_model,
-                teacher=None,
+                ta_model,
+                teacher=teacher_model,
                 train_loader=train_loader,
                 test_loader=test_loader,
                 train_config=teacher_train_config,
             )
             ta_trainer.train()
-            ta_model = load_checkpoint(teacher_model, os.path.join("./", teacher_name))
+            ta_model = load_checkpoint(ta_model, os.path.join("./", ta_name))
 
     # Student training
     print("---------- Training Student -------")
