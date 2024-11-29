@@ -41,7 +41,7 @@ def parse_arguments():
         help="description to differentiate different methods of training the same model size",
         required=True,
     )
-    parser.add_argument("--batch-size", default=32, type=int, help="batch_size")
+    parser.add_argument("--batch-size", default=128, type=int, help="batch_size")
     parser.add_argument(
         "--learning-rate", default=0.1, type=float, help="initial learning rate"
     )
