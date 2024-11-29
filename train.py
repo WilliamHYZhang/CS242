@@ -8,7 +8,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from data_loader import get_cifar
 from model_factory import create_cnn_model, is_resnet
-
+import tqdm
 
 def str2bool(v):
     if v.lower() in ("yes", "true", "t", "y", "1"):
@@ -28,7 +28,20 @@ def parse_arguments():
         type=str,
         help="dataset. can be either cifar10 or cifar100",
     )
-    parser.add_argument("--batch-size", default=128, type=int, help="batch_size")
+    parser.add_argument(
+        "--save_dir",
+        default="model_save_dir",
+        type=str,
+        help="path to folder where models should be saved",
+    )
+    parser.add_argument(
+        "--description",
+        default="",
+        type=str,
+        help="description to differentiate different methods of training the same model size",
+        required=True,
+    )
+    parser.add_argument("--batch-size", default=32, type=int, help="batch_size")
     parser.add_argument(
         "--learning-rate", default=0.1, type=float, help="initial learning rate"
     )
@@ -60,22 +73,40 @@ def parse_arguments():
     )
     parser.add_argument("--ta", default="", type=str, help="ta stuff")
     parser.add_argument(
-        "--ta-checkpoint", default="", type=str, help="ta checkpoint stuff"
+        "--ta-checkpoint", default="", type=str, help="ta checkpoint path"
+    )
+    parser.add_argument(
+        "--student-checkpoint", default="", type=str, help="student checkpoint path"
     )
     args = parser.parse_args()
     return args
 
 
-def load_checkpoint(model, checkpoint_path):
+def load_checkpoint(model, checkpoint_path, optimizer=None, get_epoch=False):
     """
     Loads weights from checkpoint
     :param model: a pytorch nn student
     :param str checkpoint_path: address/path of a file
     :return: pytorch nn student with weights loaded from checkpoint
     """
+    if not os.path.isfile(checkpoint_path):
+        print("-----------------------------")
+        print("CHECKPOINT DOES NOT EXIST")
+        print(checkpoint_path)
+        print("-----------------------------")
+
+    else:
+        print("-----------------------------")
+        print("CHECKPOINT DOES EXISTS")
+        print(checkpoint_path)
+        print("-----------------------------")
     model_ckp = torch.load(checkpoint_path)
     model.load_state_dict(model_ckp["model_state_dict"])
-    return model
+    if not get_epoch:
+        return model
+    else:
+        print("LAODING OPTIMIZER")
+        return model, model_ckp["optimizer_state_dict"], model_ckp["epoch"]
 
 
 class TrainManager(object):
@@ -88,6 +119,8 @@ class TrainManager(object):
         train_loader=None,
         test_loader=None,
         train_config={},
+        optimizer_state_dict=None,
+        start_epoch=None,
     ):
         self.student = student
         self.teacher = teacher
@@ -102,6 +135,11 @@ class TrainManager(object):
             momentum=train_config["momentum"],
             weight_decay=train_config["weight_decay"],
         )
+        if optimizer_state_dict:
+            print("USING GIVEN OPTIMIZER!")
+            self.optimizer.load_state_dict(optimizer_state_dict)
+            
+        self.start_epoch = start_epoch if start_epoch else 0
         if self.have_teacher:
             self.teacher.eval()
             self.teacher.train(mode=False)
@@ -124,11 +162,11 @@ class TrainManager(object):
         iteration = 0
         best_acc = 0
         criterion = nn.CrossEntropyLoss()
-        for epoch in range(epochs):
+        for epoch in range(self.start_epoch, epochs):
             self.student.train()
             self.adjust_learning_rate(self.optimizer, epoch)
             loss = 0
-            for batch_idx, (data, target) in enumerate(self.train_loader):
+            for batch_idx, (data, target) in tqdm.tqdm(enumerate(self.train_loader)):
                 iteration += 1
                 data = data.to(self.device)
                 target = target.to(self.device)
@@ -162,9 +200,27 @@ class TrainManager(object):
 
             print("epoch {}/{}".format(epoch, epochs))
             val_acc = self.validate(step=epoch)
+            description = self.config["args"].description.replace(" ", "_")
+            if epoch % 10 == 0:
+                self.save(
+                    epoch,
+                    name=f"{self.name}_epoch{epoch}_acc_{val_acc}_{description}.pth.tar",
+                )
+
             if val_acc > best_acc:
                 best_acc = val_acc
-                self.save(epoch, name="{}_{}_best.pth.tar".format(self.name, trial_id))
+                self.save(
+                    epoch,
+                    name=f"{self.name}_best_at_epoch{epoch}_acc_{val_acc}_{description}.pth.tar",
+                )
+                # self.save(
+                #     epoch,
+                #     name=f"{self.name}_{trial_id}_{description}_best.pth.tar",
+                # )
+                self.save(
+                    epoch,
+                    name=f"{self.name}_{description}_best.pth.tar",
+                )
 
         return best_acc
 
@@ -189,6 +245,9 @@ class TrainManager(object):
 
     def save(self, epoch, name=None):
         trial_id = self.config["trial_id"]
+        save_dir = self.config["args"].save_dir
+        description = self.config["args"].description.replace(" ", "_")
+
         if name is None:
             torch.save(
                 {
@@ -196,7 +255,9 @@ class TrainManager(object):
                     "model_state_dict": self.student.state_dict(),
                     "optimizer_state_dict": self.optimizer.state_dict(),
                 },
-                "{}_{}_epoch{}.pth.tar".format(self.name, trial_id, epoch),
+                os.path.join(
+                    save_dir, f"{self.name}_epoch{epoch}_{description}.pth.tar"
+                ),
             )
         else:
             torch.save(
@@ -205,7 +266,7 @@ class TrainManager(object):
                     "optimizer_state_dict": self.optimizer.state_dict(),
                     "epoch": epoch,
                 },
-                name,
+                os.path.join(save_dir, name),
             )
 
     def adjust_learning_rate(self, optimizer, epoch):
@@ -231,12 +292,14 @@ class TrainManager(object):
 if __name__ == "__main__":
     # Parsing arguments and prepare settings for training
     args = parse_arguments()
+    os.makedirs(args.save_dir, exist_ok=True)
     print(args)
     config = nni.get_next_parameter()
+    print("config: ", config)
     config = {
         "seed": 42,
-        "T_student": 1,
-        "lambda_student": 0.05,
+        "T_student": 5,
+        "lambda_student": 0.5,
     }
     torch.manual_seed(config["seed"])
     torch.cuda.manual_seed(config["seed"])
@@ -246,6 +309,12 @@ if __name__ == "__main__":
     teacher_model = None
     ta_model = None
     student_model = create_cnn_model(args.student, dataset, use_cuda=args.cuda)
+    optimizer = None
+    if args.student_checkpoint:
+        student_model, optimizer_state_dict, epoch = load_checkpoint(
+            student_model, args.student_checkpoint, get_epoch=True
+        )
+
     train_config = {
         "epochs": args.epochs,
         "learning_rate": args.learning_rate,
@@ -256,6 +325,8 @@ if __name__ == "__main__":
         "trial_id": trial_id,
         "T_student": config.get("T_student"),
         "lambda_student": config.get("lambda_student"),
+        "args": args,
+        "student_start_epoch": epoch,
     }
 
     # Train Teacher if provided a teacher, otherwise it's a normal training using only cross entropy loss
@@ -278,10 +349,10 @@ if __name__ == "__main__":
                 test_loader=test_loader,
                 train_config=teacher_train_config,
             )
+            description = args.description.replace(" ", "_")
             teacher_trainer.train()
-            teacher_model = load_checkpoint(
-                teacher_model, os.path.join("./", teacher_name)
-            )
+            checkpoint_path = f"{args.teacher}_{trial_id}_{description}_best.pth.tar"
+            teacher_model = load_checkpoint(teacher_model, checkpoint_path)
 
     # TA model
     if args.ta:
@@ -297,14 +368,17 @@ if __name__ == "__main__":
             ta_name = "{}_{}_best.pth.tar".format(args.ta, trial_id)
             ta_train_config["name"] = args.ta
             ta_trainer = TrainManager(
-                teacher_model,
-                teacher=None,
+                ta_model,
+                teacher=teacher_model,
                 train_loader=train_loader,
                 test_loader=test_loader,
                 train_config=teacher_train_config,
             )
+            description = args.description.replace(" ", "_")
             ta_trainer.train()
-            ta_model = load_checkpoint(teacher_model, os.path.join("./", teacher_name))
+            checkpoint_path = f"{args.ta}_{trial_id}_{description}_best.pth.tar"
+
+            ta_model = load_checkpoint(ta_model, checkpoint_path)
 
     # Student training
     print("---------- Training Student -------")
@@ -318,6 +392,8 @@ if __name__ == "__main__":
         train_loader=train_loader,
         test_loader=test_loader,
         train_config=student_train_config,
+        optimizer_state_dict=optimizer_state_dict,
+        start_epoch=epoch,
     )
     best_student_acc = student_trainer.train()
     nni.report_final_result(best_student_acc)
