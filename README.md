@@ -11,4 +11,4 @@ To run the code:
 
 `DREAM_ResNet_UltraMini.ipynb` tests the full DREAM framework (dynamic teacher/TA weighting algorithm and section-wise bottom-up distillation) against no distillation, standard distillation using ResNet 101 as the teacher, standard TA distillation using ResNet10 as the TA, an equal teacher/TA weighting algorithm, and the dynamic teacher/TA weighting algorithm alone.
 
-Use the `best_model.pth` (ResNet 101), `resnet_10_tf` (ResNet 10), and `resnet_34_tf` (ResNet 34) as preloaded teacher and TA models. For best results, we recommend hosting these notebooks on a Colab A100 instance.
+Use the `best_model.pth` [Google Drive Link](https://drive.google.com/file/d/1cNTi6VfSlG1VUg0-YdNqITXyBeG92nFZ/view?usp=sharing) (ResNet 101), `resnet_10_tf` (ResNet 10), and `resnet_34_tf` (ResNet 34) as preloaded teacher and TA models. For best results, we recommend hosting these notebooks on a Colab A100 instance.
